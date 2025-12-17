@@ -58,7 +58,7 @@ songs = [
         'name': "Cry For You",
         'author': 'Karry_b',
         'time': "时长：4:57",
-        'audio': 'https://music.163.com/song/media/outer/url?id=3323934230.mp3'
+        'audio': 'https://music.163.com/song/media/outer/url?id=3324819089.mp3'
     },
     {
         'url': "https://bpic.588ku.com/back_list_pic/22/03/17/648e220696a63adfe45c1efee071f142.jpg",
