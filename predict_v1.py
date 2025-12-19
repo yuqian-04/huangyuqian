@@ -86,9 +86,9 @@ elif page == "预测分类页面":
 
 
     # 加载模型和物种映射
-    with open('rfc_model.pkl', 'rb') as f:
+    with open('rfc_model1.pkl', 'rb') as f:
         rfc_model = pickle.load(f)
-    with open('output_uniques.pkl', 'rb') as f:
+    with open('output_uniques1.pkl', 'rb') as f:
         output_uniques = pickle.load(f)
 
 
