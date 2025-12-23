@@ -25,8 +25,8 @@ plt.rcParams['grid.alpha'] = 0.3
 # 路径配置
 PROCESSED_DATA_PATH = "https://github.com/yuqian-04/huangyuqian/processed_data.csv"
 MODEL_PATH = "https://github.com/yuqian-04/huangyuqian/optimized_score_model.pkl"
-IMAGE_FOLDER = "images"
-ZONG_IMAGE_PATH = "images\zong.png"
+IMAGE_FOLDER = "https://github.com/yuqian-04/huangyuqian/images"
+ZONG_IMAGE_PATH = "https://github.com/yuqian-04/huangyuqian/images\zong.png"
 
 # -------------------------- 数据加载 --------------------------
 @st.cache_data
