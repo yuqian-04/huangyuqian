@@ -23,10 +23,10 @@ plt.rcParams['axes.grid'] = True
 plt.rcParams['grid.alpha'] = 0.3
 
 # 路径配置
-PROCESSED_DATA_PATH = r"D:\streamlit_env\processed_data.csv"
-MODEL_PATH = r"D:\streamlit_env\optimized_score_model.pkl"
-IMAGE_FOLDER = r"D:\streamlit_env\images"
-ZONG_IMAGE_PATH = r"D:\streamlit_env\images\zong.png"
+PROCESSED_DATA_PATH = r"processed_data.csv"
+MODEL_PATH = r"optimized_score_model.pkl"
+IMAGE_FOLDER = r"images"
+ZONG_IMAGE_PATH = r"images\zong.png"
 
 # -------------------------- 数据加载 --------------------------
 @st.cache_data
