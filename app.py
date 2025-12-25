@@ -15,31 +15,46 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 中文显示
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS']
-plt.rcParams['axes.unicode_minus'] = False
-plt.rcParams['figure.facecolor'] = 'white'
-plt.rcParams['axes.grid'] = True
-plt.rcParams['grid.alpha'] = 0.3
+# 中文显示 - 增强配置
+import matplotlib
+matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+matplotlib.rcParams['axes.unicode_minus'] = False
+matplotlib.rcParams['figure.facecolor'] = 'white'
+matplotlib.rcParams['axes.grid'] = True
+matplotlib.rcParams['grid.alpha'] = 0.3
 
-# 路径配置
-PROCESSED_DATA_PATH = "https://github.com/yuqian-04/huangyuqian/processed_data.csv"
-MODEL_PATH = "https://github.com/yuqian-04/huangyuqian/optimized_score_model.pkl"
-IMAGE_FOLDER = "https://github.com/yuqian-04/huangyuqian/images"
-ZONG_IMAGE_PATH = "https://github.com/yuqian-04/huangyuqian/images/zong.png"
+# 路径配置 - 修改为相对路径
+PROCESSED_DATA_PATH = "processed_data.csv"
+MODEL_PATH = "optimized_score_model.pkl"
+IMAGE_FOLDER = "images"
+ZONG_IMAGE_PATH = "images/zong.png"
 
 # -------------------------- 数据加载 --------------------------
 @st.cache_data
 def load_data():
     try:
+        # 检查文件是否存在
+        if not os.path.exists(PROCESSED_DATA_PATH):
+            st.warning(f"数据文件未找到: {PROCESSED_DATA_PATH}")
+            st.info("正在生成模拟数据...")
+            # 生成模拟数据
+            return generate_sample_data()
+        
         df = pd.read_csv(PROCESSED_DATA_PATH, encoding='utf-8')
         df.columns = df.columns.str.strip()
+        
+        # 检查模型文件是否存在
+        if not os.path.exists(MODEL_PATH):
+            st.warning(f"模型文件未找到: {MODEL_PATH}")
+            st.info("正在生成模拟数据...")
+            return generate_sample_data()
+            
         model_package = joblib.load(MODEL_PATH)
         attendance_col = model_package['attendance_col']
         
         if attendance_col not in df.columns:
-            st.error(f"数据缺少出勤率列：{attendance_col}，请重新运行model.py")
-            st.stop()
+            st.error(f"数据缺少出勤率列：{attendance_col}")
+            return generate_sample_data()
         
         df[attendance_col] = pd.to_numeric(df[attendance_col], errors='coerce')
         df['期末成绩是否及格'] = df['期末考试分数'] >= 60
@@ -48,8 +63,47 @@ def load_data():
         return df, attendance_col
     except Exception as e:
         st.error(f"数据加载错误：{str(e)}")
-        st.stop()
+        st.info("正在生成模拟数据...")
+        return generate_sample_data()
 
+# 添加模拟数据生成函数
+def generate_sample_data():
+    np.random.seed(42)
+    n = 200
+    majors = ['Computer Science', 'Big Data Management', 'Software Engineering', 'Artificial Intelligence', 'Network Engineering']
+    
+    df = pd.DataFrame({
+        '专业': np.random.choice(majors, n),
+        '性别': np.random.choice(['男', '女'], n),
+        '每周学习时长（小时）': np.random.normal(25, 5, n).clip(10, 40),
+        '上课出勤率': np.random.beta(8, 2, n) * 100,
+        '期中考试分数': np.random.normal(75, 10, n).clip(50, 100),
+        '作业完成率': np.random.beta(7, 3, n) * 100,
+        '期末考试分数': np.random.normal(78, 12, n).clip(40, 100)
+    })
+    
+    # 调整期末分数，使其与学习指标正相关
+    df['期末考试分数'] = (
+        df['期末考试分数'] * 0.7 + 
+        df['上课出勤率'] * 0.2 + 
+        df['作业完成率'] * 0.1 +
+        df['期中考试分数'] * 0.1
+    ).clip(40, 100)
+    
+    # 创建模拟模型
+    global model_package
+    model_package = {
+        'model': None,
+        'scaler': None,
+        'selected_features': ['上课出勤率', '每周学习时长（小时）', '期中考试分数', '作业完成率'],
+        'gender_map': {'男': 1, '女': 0},
+        'major_encoder': {'Computer Science': 0, 'Big Data Management': 1, 'Software Engineering': 2, 'Artificial Intelligence': 3, 'Network Engineering': 4},
+        'attendance_col': '上课出勤率'
+    }
+    
+    return df, '上课出勤率'
+
+# 加载数据
 df, attendance_col = load_data()
 
 # -------------------------- 模型加载 --------------------------
@@ -59,8 +113,16 @@ def load_model():
         model_package = joblib.load(MODEL_PATH)
         return model_package
     except Exception as e:
-        st.error(f"模型加载错误：{str(e)}")
-        st.stop()
+        st.warning(f"模型加载错误：{str(e)}，使用模拟模型")
+        # 返回模拟模型
+        return {
+            'model': None,
+            'scaler': None,
+            'selected_features': ['上课出勤率', '每周学习时长（小时）', '期中考试分数', '作业完成率'],
+            'gender_map': {'男': 1, '女': 0},
+            'major_encoder': {'Computer Science': 0, 'Big Data Management': 1, 'Software Engineering': 2, 'Artificial Intelligence': 3, 'Network Engineering': 4},
+            'attendance_col': '上课出勤率'
+        }
 
 model_package = load_model()
 
@@ -113,10 +175,23 @@ if page == "项目介绍":
     
     with col_image:
         st.subheader("📊 系统示意图")
+        # 检查图片路径 - 修正为通用路径格式
         if os.path.exists(ZONG_IMAGE_PATH):
             st.image(ZONG_IMAGE_PATH, use_container_width=True)
+        elif os.path.exists("images/zong.png"):
+            st.image("images/zong.png", use_container_width=True)
+        elif os.path.exists(os.path.join("images", "zong.png")):
+            st.image(os.path.join("images", "zong.png"), use_container_width=True)
         else:
-            st.warning(f"图片文件未找到：{ZONG_IMAGE_PATH}")
+            # 如果没有图片，显示占位符
+            st.info("📊 系统示意图位置")
+            st.markdown("**系统架构图**")
+            st.markdown("""
+            1. **数据层**: CSV数据文件
+            2. **处理层**: Pandas数据处理
+            3. **模型层**: Scikit-learn机器学习
+            4. **展示层**: Streamlit可视化界面
+            """)
     
     st.subheader("🏗️ 技术架构")
     tech_cols = st.columns(4)
@@ -137,29 +212,60 @@ if page == "项目介绍":
 elif page == "专业数据分析":
     st.title("专业数据分析")
     
+    # 创建英文专业名称映射（仅用于图表显示）
+    major_mapping = {
+        '计算机科学': 'Computer Science',
+        '大数据管理': 'Big Data Management', 
+        '软件工程': 'Software Engineering',
+        '人工智能': 'Artificial Intelligence',
+        '网络工程': 'Network Engineering',
+        '工商管理': 'Business Administration',
+        '电子商务': 'E-commerce',
+        '财务管理': 'Financial Management'
+    }
+    
     # 各专业男女性别比例
     st.subheader("1. 各专业男女性别比例")
     col_chart1, col_table1 = st.columns([2, 1])
     with col_chart1:
         gender_count = df.groupby(['专业', '性别']).size().unstack(fill_value=0)
         gender_ratio = (gender_count.div(gender_count.sum(axis=1), axis=0) * 100).round(1)
+        
+        # 获取英文专业名称（仅用于图表）
+        english_majors = [major_mapping.get(major, major) for major in gender_ratio.index]
+        
         fig1, ax1 = plt.subplots(figsize=(10, 6))
+        
+        # 设置字体
+        plt.rcParams.update({
+            'font.sans-serif': 'SimHei',
+            'axes.unicode_minus': False
+        })
+        
         ax1.set_ylim(0, 60)
         x = np.arange(len(gender_ratio.index))
         width = 0.35
-        ax1.bar(x - width/2, gender_ratio['男'], width, label='男生', color='#1f77b4', alpha=0.8)
-        ax1.bar(x + width/2, gender_ratio['女'], width, label='女生', color='#ffbbcc', alpha=0.8)
-        ax1.set_xlabel('专业', fontsize=12)
-        ax1.set_ylabel('比例（%）', fontsize=12)
-        ax1.set_title('各专业男女性别比例', fontsize=14)
+        ax1.bar(x - width/2, gender_ratio['男'], width, label='Male', color='#1f77b4', alpha=0.8)
+        ax1.bar(x + width/2, gender_ratio['女'], width, label='Female', color='#ffbbcc', alpha=0.8)
+        
+        # X轴改为英文
+        ax1.set_xlabel('Major', fontsize=12)
+        ax1.set_ylabel('Ratio (%)', fontsize=12)
+        ax1.set_title('Gender Ratio by Major', fontsize=14)
         ax1.set_xticks(x)
-        ax1.set_xticklabels(gender_ratio.index, rotation=45, ha='right')
-        ax1.legend()
+        
+        # 设置刻度标签为英文专业名称
+        ax1.set_xticklabels(english_majors, rotation=45, ha='right')
+        
+        # 设置图例
+        legend = ax1.legend()
+        
         st.pyplot(fig1)
     with col_table1:
         st.markdown("**性别比例（%）**")
         gender_table = gender_ratio.reset_index()
-        gender_table.columns = ['major', '女', '男']
+        gender_table.columns = ['专业', '女', '男']
+        # 表格保持中文
         st.dataframe(gender_table, use_container_width=True)
     
     # 各专业学习指标对比
@@ -171,32 +277,49 @@ elif page == "专业数据分析":
             '期中考试分数': 'mean',
             '期末考试分数': 'mean'
         }).round(1)
+        
+        # 获取英文专业名称（仅用于图表）
+        english_majors = [major_mapping.get(major, major) for major in study_metrics.index]
+        
         fig2, ax2_1 = plt.subplots(figsize=(10, 6))
+        
+        # 设置字体
+        plt.rcParams.update({
+            'font.sans-serif': 'SimHei',
+            'axes.unicode_minus': False
+        })
+        
         x = np.arange(len(study_metrics.index))
         bars = ax2_1.bar(x, study_metrics['每周学习时长（小时）'], color='#1f77b4', alpha=0.8)
-        ax2_1.set_xlabel('专业', fontsize=12)
-        ax2_1.set_ylabel('学习时间（小时）', fontsize=12, color='#1f77b4')
+        # X轴改为英文
+        ax2_1.set_xlabel('Major', fontsize=12, color='#1f77b4')
+        ax2_1.set_ylabel('Study Time (hours)', fontsize=12, color='#1f77b4')
         ax2_1.tick_params(axis='y', labelcolor='#1f77b4')
         ax2_2 = ax2_1.twinx()
         line1, = ax2_2.plot(x, study_metrics['期中考试分数'], marker='o', color='#ffaa00', linewidth=2)
         line2, = ax2_2.plot(x, study_metrics['期末考试分数'], marker='s', color='#2ca02c', linewidth=2)
-        ax2_2.set_ylabel('分数（分）', fontsize=12, color='#333')
+        ax2_2.set_ylabel('Score (points)', fontsize=12, color='#333')
         ax2_2.tick_params(axis='y', labelcolor='#333')
+        
+        # 设置图例
         ax2_1.legend([bars, line1, line2], 
-                    ['平均学习时间', '期中成绩', '期末成绩'],
+                    ['Average Study Time', 'Midterm Score', 'Final Score'],
                     loc='upper center', 
                     bbox_to_anchor=(0.5, 1.15),
                     ncol=3, 
                     fontsize=11,
                     frameon=False)
-        ax2_1.set_title('各专业学习时间与成绩对比', fontsize=14)
+            
+        ax2_1.set_title('Study Time vs. Scores by Major', fontsize=14)
         ax2_1.set_xticks(x)
-        ax2_1.set_xticklabels(study_metrics.index, rotation=45, ha='right')
+        # X轴标签改为英文专业名称
+        ax2_1.set_xticklabels(english_majors, rotation=45, ha='right')
         st.pyplot(fig2)
     with col_table2:
         st.markdown("**学习指标详情**")
         study_table = study_metrics.reset_index()
         study_table.columns = ['专业', '平均学习时间（小时）', '期中平均分（分）', '期末平均分（分）']
+        # 表格保持中文
         st.dataframe(study_table, use_container_width=True)
     
     # 各专业出勤率分析
@@ -208,15 +331,27 @@ elif page == "专业数据分析":
         majors = attendance_percent.index.tolist()
         attendance_values = [int(value * 100) / 100.0 for value in attendance_percent]
         
+        # 获取英文专业名称（仅用于图表）
+        english_majors = [major_mapping.get(major, major) for major in majors]
+        
         fig3, (ax3_1, ax3_2) = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={'height_ratios': [10, 1]})
+        
+        # 设置字体
+        plt.rcParams.update({
+            'font.sans-serif': 'SimHei',
+            'axes.unicode_minus': False
+        })
+        
         x_positions = range(len(majors))
         bars = ax3_1.bar(x_positions, attendance_values, color='#4CAF50', alpha=0.7, edgecolor='#2E7D32', width=0.6)
         ax3_1.set_ylim(0, 100)
-        ax3_1.set_xlabel('专业', fontsize=12)
-        ax3_1.set_ylabel('平均出勤率（%）', fontsize=12)
-        ax3_1.set_title('各专业平均出勤率', fontsize=14)
+        # X轴改为英文
+        ax3_1.set_xlabel('Major', fontsize=12)
+        ax3_1.set_ylabel('Average Attendance Rate (%)', fontsize=12)
+        ax3_1.set_title('Average Attendance Rate by Major', fontsize=14)
         ax3_1.set_xticks(x_positions)
-        ax3_1.set_xticklabels(majors, rotation=45, ha='right')
+        # X轴标签改为英文专业名称
+        ax3_1.set_xticklabels(english_majors, rotation=45, ha='right')
         ax3_1.grid(axis='y', alpha=0.3)
         
         for i, bar in enumerate(bars):
@@ -232,8 +367,8 @@ elif page == "专业数据分析":
         ax3_2.set_xticks([0, 20, 40, 60, 80, 100])
         ax3_2.set_xticklabels(['0%', '20%', '40%', '60%', '80%', '100%'])
         ax3_2.set_yticks([])
-        ax3_2.set_xlabel('出勤率值', fontsize=9)
-        ax3_2.set_title('出勤程度参考（紫=低，黄=高）', fontsize=10, pad=10)
+        ax3_2.set_xlabel('Attendance Rate Value', fontsize=9)
+        ax3_2.set_title('Attendance Level Reference (Purple=Low, Yellow=High)', fontsize=10, pad=10)
         ax3_2.spines['top'].set_visible(False)
         ax3_2.spines['right'].set_visible(False)
         ax3_2.spines['bottom'].set_visible(True)
@@ -247,6 +382,7 @@ elif page == "专业数据分析":
         ranking_df = ranking_df.sort_values('平均出勤率', ascending=False)
         ranking_df['排名'] = range(1, len(ranking_df) + 1)
         ranking_df['平均出勤率'] = ranking_df['平均出勤率'].apply(lambda x: f"{x:.2f}%")
+        # 表格保持中文
         ranking_df = ranking_df[['排名', '专业', '平均出勤率']]
         st.dataframe(ranking_df, use_container_width=True)
     
@@ -270,19 +406,36 @@ elif page == "专业数据分析":
         col_chart4_1, col_chart4_2 = st.columns(2)
         with col_chart4_1:
             fig4_1, ax4_1 = plt.subplots(figsize=(8, 6))
+            
+            # 设置字体
+            plt.rcParams.update({
+                'font.sans-serif': 'SimHei',
+                'axes.unicode_minus': False
+            })
+            
             bins = np.arange(60, 105, 5)
             ax4_1.hist(bigdata_df['期末考试分数'], bins=bins, color='#98FB98', alpha=0.7, edgecolor='#32CD32')
-            ax4_1.set_xlabel('期末成绩（分）', fontsize=12)
-            ax4_1.set_ylabel('人数', fontsize=12)
-            ax4_1.set_title('期末成绩分布图（60-100分）', fontsize=14)
+            # X轴改为英文
+            ax4_1.set_xlabel('Final Score (points)', fontsize=12)
+            ax4_1.set_ylabel('Number of Students', fontsize=12)
+            ax4_1.set_title('Final Score Distribution (60-100 points)', fontsize=14)
             ax4_1.set_xticks(bins)
+            ax4_1.set_xticklabels([str(int(b)) for b in bins])
             ax4_1.grid(axis='y', alpha=0.3)
             st.pyplot(fig4_1)
         
         with col_chart4_2:
             fig4_2, ax4_2 = plt.subplots(figsize=(8, 6))
+            
+            # 设置字体
+            plt.rcParams.update({
+                'font.sans-serif': 'SimHei',
+                'axes.unicode_minus': False
+            })
+            
             box_data = bigdata_df['期末考试分数'].values
-            boxplot = ax4_2.boxplot([box_data], labels=['大数据管理专业'], patch_artist=True,
+            # X轴标签改为英文
+            boxplot = ax4_2.boxplot([box_data], labels=['Big Data Management'], patch_artist=True,
                                    showmeans=True, meanline=True, showfliers=True, widths=0.6)
             
             for box in boxplot['boxes']:
@@ -300,8 +453,12 @@ elif page == "专业数据分析":
                 flier.set(marker='o', color='#FF6347', alpha=0.7, markersize=6)
             
             ax4_2.set_ylim(50, 100)
-            ax4_2.set_ylabel('期末成绩（分）', fontsize=12)
-            ax4_2.set_title('大数据管理专业期末成绩箱线图', fontsize=14)
+            ax4_2.set_ylabel('Final Score (points)', fontsize=12)
+            ax4_2.set_title('Big Data Management Final Score Box Plot', fontsize=14)
+            
+            # X轴标签改为英文
+            ax4_2.set_xticklabels(['Big Data Management'])
+            
             ax4_2.grid(axis='y', alpha=0.3)
             plt.tight_layout()
             st.pyplot(fig4_2)
@@ -408,25 +565,39 @@ elif page == "成绩预测":
                 # 如果所有指标都拉满，直接显示100分
                 pred_score = 100.00
             else:
-                # 按特征顺序整理输入
-                input_features = [input_data[feat] for feat in selected_features]
-                input_scaled = scaler.transform([input_features])
-                
-                # 预测
-                pred_score = model.predict(input_scaled)[0]
-                
-                # 增强出勤率和作业完成率的影响（提高灵敏度）
-                # 出勤率每1%增加0.8分，作业完成率每1%增加0.6分
-                if attendance_col in input_data:
-                    attendance_effect = (input_data[attendance_col] - 70) * 0.008
-                    pred_score += attendance_effect
-                
-                if '作业完成率' in input_data:
-                    homework_effect = (input_data['作业完成率'] - 70) * 0.006
-                    pred_score += homework_effect
-                
-                # 确保分数在合理范围内
-                pred_score = max(0.0, min(pred_score, 100.0))
+                # 如果模型不存在，使用简单预测
+                if model is None:
+                    # 简单预测公式
+                    pred_score = (
+                        attendance_rate * 0.3 +
+                        homework_rate * 0.2 +
+                        midterm_score * 0.3 +
+                        study_hours * 0.5
+                    )
+                    pred_score = min(pred_score, 100.0)
+                else:
+                    # 按特征顺序整理输入
+                    input_features = [input_data[feat] for feat in selected_features]
+                    if scaler is not None:
+                        input_scaled = scaler.transform([input_features])
+                    else:
+                        input_scaled = [input_features]
+                    
+                    # 预测
+                    pred_score = model.predict(input_scaled)[0]
+                    
+                    # 增强出勤率和作业完成率的影响（提高灵敏度）
+                    # 出勤率每1%增加0.8分，作业完成率每1%增加0.6分
+                    if attendance_col in input_data:
+                        attendance_effect = (input_data[attendance_col] - 70) * 0.008
+                        pred_score += attendance_effect
+                    
+                    if '作业完成率' in input_data:
+                        homework_effect = (input_data['作业完成率'] - 70) * 0.006
+                        pred_score += homework_effect
+                    
+                    # 确保分数在合理范围内
+                    pred_score = max(0.0, min(pred_score, 100.0))
             
             # 截断到小数点后两位，不四舍五入
             pred_score = float(pred_score)
@@ -490,7 +661,6 @@ elif page == "成绩预测":
         if all_max:
             st.success("🎉 太优秀啦！")
         
-       
         st.markdown("### 🎨 成绩评价")
         
         if pred_score == 100.00:  
@@ -502,11 +672,30 @@ elif page == "成绩预测":
         else:
             image_name = "bujige.jpg"
         
-        image_path = os.path.join(IMAGE_FOLDER, image_name)
-        if os.path.exists(image_path):
-            st.image(image_path, use_container_width=True)
-        else:
-            st.warning(f"提示：图片文件 {image_name} 未找到")
+        # 尝试多种路径查找图片
+        image_paths = [
+            os.path.join(IMAGE_FOLDER, image_name),
+            os.path.join("images", image_name),
+            image_name
+        ]
+        
+        image_found = False
+        for img_path in image_paths:
+            if os.path.exists(img_path):
+                st.image(img_path, use_container_width=True)
+                image_found = True
+                break
+        
+        if not image_found:
+            # 如果没有图片，显示文字评价
+            if pred_score == 100.00:
+                st.success("🎯 完美表现！继续保持！")
+            elif pred_score >= 85:
+                st.info("👍 优秀表现，继续努力！")
+            elif pred_score >= 60:
+                st.warning("📝 刚及格，需要更加努力！")
+            else:
+                st.error("💪 不及格，请立即加强学习！")
     
     else:
         # 首次进入页面时的提示
